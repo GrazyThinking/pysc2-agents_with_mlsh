@@ -79,6 +79,8 @@ class A3CAgent(object):
       advantage = tf.stop_gradient(self.value_target - self.value)
       policy_loss = - tf.reduce_mean(action_log_prob * advantage)
       value_loss = - tf.reduce_mean(self.value * advantage)
+      print('net:' + str(advantage))
+
       self.summary.append(tf.summary.scalar('policy_loss', policy_loss))
       self.summary.append(tf.summary.scalar('value_loss', value_loss))
 
@@ -88,10 +90,13 @@ class A3CAgent(object):
       # Build the optimizer
       self.learning_rate = tf.placeholder(tf.float32, None, name='learning_rate')
       opt = tf.train.RMSPropOptimizer(self.learning_rate, decay=0.99, epsilon=1e-10)
+
       grads = opt.compute_gradients(loss)
+
       cliped_grad = []
       for grad, var in grads:
         self.summary.append(tf.summary.histogram(var.op.name, var))
+        #print('grad name:'+str(var.op.name) + ' , ' + str(grad))
         self.summary.append(tf.summary.histogram(var.op.name+'/grad', grad))
         grad = tf.clip_by_norm(grad, 10.0)
         cliped_grad.append([grad, var])
@@ -234,3 +239,5 @@ class A3CAgent(object):
     ckpt = tf.train.get_checkpoint_state(path)
     self.saver.restore(self.sess, ckpt.model_checkpoint_path)
     return int(ckpt.model_checkpoint_path.split('-')[-1])
+  def isMLSH(self):
+    return False

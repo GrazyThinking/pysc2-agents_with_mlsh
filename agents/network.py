@@ -6,17 +6,13 @@ import tensorflow as tf
 import tensorflow.contrib.layers as layers
 
 
-
-
-def build_net(minimap, screen, info, msize, ssize, num_action, ntype):
+def build_net(minimap, screen, info, msize, ssize, num_action, ntype,index=None):
   if ntype == 'atari':
     return build_atari(minimap, screen, info, msize, ssize, num_action)
   elif ntype == 'fcn':
-    return build_fcn(minimap, screen, info, msize, ssize, num_action)
+    return build_fcn(minimap, screen, info, msize, ssize, num_action,index)
   if ntype == 'master_policy':
       return build_master_policy(minimap,screen,info,msize,ssize,num_action)
-  if ntype == 'subpolicy':
-      return build_subpolicy(minimap,screen,info,msize,ssize,num_action)
   else:
     raise 'FLAGS.net is not included'
 
@@ -81,32 +77,32 @@ def build_atari(minimap, screen, info, msize, ssize, num_action):
   return spatial_action, non_spatial_action, value
 
 
-def build_fcn(minimap, screen, info, msize, ssize, num_action):
+def build_fcn(minimap, screen, info, msize, ssize, num_action,index=None):
   # Extract features
   mconv1 = layers.conv2d(tf.transpose(minimap, [0, 2, 3, 1]),
                          num_outputs=16,
                          kernel_size=5,
                          stride=1,
-                         scope='mconv1')
+                         scope='mconv1_sub_'+str(index))
   mconv2 = layers.conv2d(mconv1,
                          num_outputs=32,
                          kernel_size=3,
                          stride=1,
-                         scope='mconv2')
+                         scope='mconv2_sub_'+str(index))
   sconv1 = layers.conv2d(tf.transpose(screen, [0, 2, 3, 1]),
                          num_outputs=16,
                          kernel_size=5,
                          stride=1,
-                         scope='sconv1')
+                         scope='sconv1_sub_'+str(index))
   sconv2 = layers.conv2d(sconv1,
                          num_outputs=32,
                          kernel_size=3,
                          stride=1,
-                         scope='sconv2')
+                         scope='sconv2_sub_'+str(index))
   info_fc = layers.fully_connected(layers.flatten(info),
                                    num_outputs=256,
                                    activation_fn=tf.tanh,
-                                   scope='info_fc')
+                                   scope='info_fc_sub_'+str(index))
 
   # Compute spatial actions
   feat_conv = tf.concat([mconv2, sconv2], axis=3)
@@ -115,7 +111,7 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                  kernel_size=1,
                                  stride=1,
                                  activation_fn=None,
-                                 scope='spatial_action')
+                                 scope='spatial_action_sub_'+str(index))
   spatial_action = tf.nn.softmax(layers.flatten(spatial_action))
 
   # Compute non spatial actions and value
@@ -123,56 +119,51 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   feat_fc = layers.fully_connected(feat_fc,
                                    num_outputs=256,
                                    activation_fn=tf.nn.relu,
-                                   scope='feat_fc')
+                                   scope='feat_fc_sub_'+str(index))
   non_spatial_action = layers.fully_connected(feat_fc,
                                               num_outputs=num_action,
                                               activation_fn=tf.nn.softmax,
-                                              scope='non_spatial_action')
+                                              scope='non_spatial_action_sub_'+str(index))
   value = tf.reshape(layers.fully_connected(feat_fc,
                                             num_outputs=1,
                                             activation_fn=None,
-                                            scope='value'), [-1])
+                                            scope='value_sub_'+str(index)), [-1])
 
   return spatial_action, non_spatial_action, value
 
 
-def build_master_policy(minimap, screen, info, msize, ssize, num_action):
+def build_master_policy(minimap, screen, info, msize, ssize, num_subpolicies):
     mconv1 = layers.conv2d(tf.transpose(minimap, [0, 2, 3, 1]),
                            num_outputs=16,
                            kernel_size=8,
                            stride=4,
-                           scope='mconv1')
+                           scope='mconv1_master')
     mconv2 = layers.conv2d(mconv1,
                            num_outputs=32,
                            kernel_size=4,
                            stride=2,
-                           scope='mconv2')
+                           scope='mconv2_master')
     sconv1 = layers.conv2d(tf.transpose(screen, [0, 2, 3, 1]),
                            num_outputs=16,
                            kernel_size=8,
                            stride=4,
-                           scope='sconv1')
+                           scope='sconv1_master')
     sconv2 = layers.conv2d(sconv1,
                            num_outputs=32,
                            kernel_size=4,
                            stride=2,
-                           scope='sconv2')
+                           scope='sconv2_master')
     info_fc = layers.fully_connected(layers.flatten(info),
                                      num_outputs=256,
                                      activation_fn=tf.tanh,
-                                     scope='info_fc')
+                                     scope='info_fc_master')
     feat_fc = tf.concat([layers.flatten(mconv2), layers.flatten(sconv2), info_fc], axis=1)
     feat_fc = layers.fully_connected(feat_fc,
                                      num_outputs=256,
                                      activation_fn=tf.nn.relu,
-                                     scope='feat_fc')
+                                     scope='feat_fc_master')
     subpolicy_Q = layers.fully_connected(feat_fc,
-                                              num_outputs=num_action,
-                                              activation_fn=tf.nn.softmax,
-                                              scope='subpolicy_Q')
-
+                                         num_outputs=num_subpolicies,
+                                         activation_fn=None,
+                                         scope='subpolicy_Q')
     return subpolicy_Q
-
-
-def build_subpolicy(minimap, screen, info, msize, ssize, num_action):
-    return build_fcn(minimap,screen,info,msize,ssize,num_action)
